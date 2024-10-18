@@ -1,0 +1,3 @@
+# md2ooxml
+
+Convert a markdown text into a docx using PHPOffice. Work in progress ...
