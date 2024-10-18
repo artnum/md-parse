@@ -1,0 +1,26 @@
+{
+    "name": "artnum/md2ooxml",
+    "description": "Convert markdown to docx",
+    "type": "libary",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Etienne Bagnoud",
+            "email": "etienne@artnum.ch"
+        }
+    ],
+
+    "autoload": {
+        "psr-4": {
+            "md2ooxml\\": "src/"
+        },
+        "files": [
+            "src/tokenize.php",
+            "src/parse.php"
+        ]
+    },
+
+    "require": {
+        "phpoffice/phpword": "^1.3"
+    }
+}
