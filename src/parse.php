@@ -355,7 +355,6 @@ function is_previous_tablerow_delimiter_row (array $elements, int $index): int {
 
 function isEmptyValue($value)
 {
-    echo "VALUE <" . $value . '> : ' . preg_match('/^[ \s\t\n\r\n]*$/', $value) . PHP_EOL;
     if (preg_match('/^[ \s\t\n\r\n]*$/', $value)) {
         return true;
     }
@@ -778,7 +777,6 @@ function parse(array $tokens): array
                 !is_tag_open($opened, TagType::STRIKETHROUGH)
                 && peek_next_token_type($tokens, $i) !== Token::WS
             ) {
-                echo 'OPEN STRIKETHROUGH' . PHP_EOL;
                 $result[] = new MDElement(TagType::STRIKETHROUGH);
                 set_tag_open($opened, TagType::STRIKETHROUGH);
                 continue;
@@ -787,7 +785,6 @@ function parse(array $tokens): array
                     is_tag_open($opened, TagType::STRIKETHROUGH) 
                     && peek_previous_token_type($tokens, $i) !== Token::WS
             ) {
-                echo 'CLOSE STRIKETHROUGH' . PHP_EOL;
                 $result[] = new MDElement(TagType::STRIKETHROUGH, 0, true);
                 unset_all_tags_open($opened, TagType::STRIKETHROUGH);
                 continue;

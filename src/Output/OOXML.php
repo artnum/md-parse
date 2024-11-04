@@ -3,19 +3,19 @@ declare(strict_types=1);
 
 namespace md2ooxml\Output;
 
+use Exception;
 use md2ooxml\TagType;
 use PhpOffice\PhpWord\Element\Section;
 use PhpOffice\PhpWord\Element\TextRun;
 use PhpOffice\PhpWord\PhpWord;
 use PhpOffice\PhpWord\Style\ListItem;
-use phpseclib3\Math\BigInteger\Engines\PHP;
+use ZipArchive;
 
 class OOXML {
     public Section $section;
     public PhpWord $word;
     function __construct(PhpWord $word, ?Section $section = null)
     {
-
         $this->word = $word;
         if ($section === null) {
             $section = $word->addSection('md-section');
@@ -24,10 +24,33 @@ class OOXML {
         }
     }
 
+    /* Copy styles.xml as phpword doesn't copy correctly all styles. */
+    function copyStyles (string $template, string $output)
+    {
+        try {
+            $srcZip = new ZipArchive;
+            $destZip = new ZipArchive;
+            if (!$srcZip->open($template, ZipArchive::RDONLY)) {
+                throw new Exception('Zip open failed');
+            }
+            if (!$destZip->open($output)) {
+                throw new Exception('Zip open failed');
+            }
+            $destZip->addFromString('word/styles.xml', $srcZip->getFromName('word/styles.xml'));
+
+            $srcZip->close();
+            $destZip->close();
+        } catch (Exception $e) {
+            throw new Exception('Failed to copy styles.xml', 0, $e);
+        }
+    }
+
+    /* escape chars */
     function write(TextRun $run, string $text, string $fontStyle = 'md-text') {
         $run->addText(htmlspecialchars($text), $fontStyle);
     }
 
+    /* convert cm to twip */
     function cm2twip (float $cm) {
         return round($cm * 1000 / 17.64, 0, PHP_ROUND_HALF_EVEN) * 10;
     }
@@ -49,10 +72,13 @@ class OOXML {
         $run = null;
         $currentTable = null;
         $fontStyle = 'md-text';
-        $listPStyle = 'md-list-ul';
         $listStyle = 'md-ol-numberging';
 
-        /* numbering style are not copied from template */
+        /* *** numbering style are not copied from template *** */
+
+        /* numbered list set as default in phpword don't seem to work, recreate
+         * here
+         */
         $baseNumberingStyle =         [
             'type' => 'multilevel',
             'levels' => [
@@ -67,25 +93,7 @@ class OOXML {
                 ['format' => 'lowerRoman',  'text' => '%9. ', 'left' => self::DEFAULT_LEFT_L9_TWIP, 'hanging' => self::DEFAULT_HANGING_TWIP],
 
             ],
-        ];
-        /*
-        $this->word->addNumberingStyle(
-            'md-ol-item',
-            [
-                'type' => 'multilevel',
-                'levels' => [
-                    ['format' => 'bullet', 'text' => '•', 'left' => self::DEFAULT_LEFT_L1_TWIP, 'hanging' => self::DEFAULT_HANGING_TWIP],
-                    ['format' => 'bullet', 'text' => 'o', 'left' => self::DEFAULT_LEFT_L2_TWIP, 'hanging' => self::DEFAULT_HANGING_TWIP],
-                    ['format' => 'bullet', 'text' => '🞍', 'left' => self::DEFAULT_LEFT_L3_TWIP, 'hanging' => self::DEFAULT_HANGING_TWIP],
-                    ['format' => 'bullet', 'text' => '•', 'left' => self::DEFAULT_LEFT_L4_TWIP, 'hanging' => self::DEFAULT_HANGING_TWIP],
-                    ['format' => 'bullet', 'text' => 'o', 'left' => self::DEFAULT_LEFT_L5_TWIP, 'hanging' => self::DEFAULT_HANGING_TWIP],
-                    ['format' => 'bullet', 'text' => '🞍', 'left' => self::DEFAULT_LEFT_L6_TWIP, 'hanging' => self::DEFAULT_HANGING_TWIP],
-                    ['format' => 'bullet', 'text' => '•', 'left' => self::DEFAULT_LEFT_L7_TWIP, 'hanging' => self::DEFAULT_HANGING_TWIP],
-                    ['format' => 'bullet', 'text' => 'o', 'left' => self::DEFAULT_LEFT_L8_TWIP, 'hanging' => self::DEFAULT_HANGING_TWIP],
-                    ['format' => 'bullet', 'text' => '🞍', 'left' => self::DEFAULT_LEFT_L9_TWIP, 'hanging' => self::DEFAULT_HANGING_TWIP]
-                ]
-            ]
-        );     */      
+        ];  
 
         $listOLIdCount = 0;
         $pStyle = 'md-ol-item';
@@ -159,6 +167,7 @@ class OOXML {
                         $run = null;
                         break; 
                     }
+                    /* hack to have numbering restart */
                     $listStyle = 'md-ol-item' . $listOLIdCount++;
                     $this->word->addNumberingStyle(
                         $listStyle,
@@ -207,12 +216,13 @@ class OOXML {
                     break;
                 case TagType::TABLE:
                     if ($element->close) { break; }
-                    $currentTable = $this->section->addTable();
+                    $currentTable = $this->section->addTable('md-table');
                     break;
                 case TagType::TABLEHEADER:
                 case TagType::TABLEROW:
                     if ($currentTable === null) { break; }
                     if ($element->close) { break; }
+                    
                     $currentTable->addRow();
                     break;
                 case TagType::TABLECELL:
@@ -226,8 +236,7 @@ class OOXML {
                     }
                     $currentTable->addCell()->addText($text);
                     $i = $i + $j;
-                    break;
-                
+                    break;   
             }
         }
     }
