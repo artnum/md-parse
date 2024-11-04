@@ -10,7 +10,7 @@ declare(strict_types=1);
  * 
  * 
  * - [x] ATX Header
- * - [ ] Setext Header
+ * - [#] Setext Header
  * - [~] Code block
  * - [ ] Fenced code block
  * - [x] Blockquote
@@ -322,44 +322,12 @@ function unset_all_tags_open(array &$opened, TagType $tag) {
     $opened = array_filter($opened, fn($t) => $t['type'] !== $tag);
 }
 
-function peek_next_element(array $elements, int $index): MDElement {
-    if ($index + 1 >= count($elements)) {
-        return new MDElement();
-    }
-    return $elements[$index + 1];
-}
 
 function peek_previous_element(array $elements, int $index): MDElement {
     if ($index - 1 < 0) {
         return new MDElement();
     }
     return $elements[$index - 1];
-}
-
-function is_surrounded_by_block_element (array $elements, int $index): bool {
-    if ($index === 0 || $index + 1 >= count($elements)) {
-        return false;
-    }
-    $before = $elements[$index - 1];
-    $after = $elements[$index + 1];
-    switch($before->tag) {
-        case TagType::HEADER:
-        case TagType::PRE:
-        case TagType::QUOTE:
-        case TagType::UL:
-        case TagType::OL:
-            switch($after->tag) {
-                case TagType::HEADER:
-                case TagType::PRE:
-                case TagType::QUOTE:
-                case TagType::UL:
-                case TagType::OL:
-                    return true;
-            }
-
-    }
-
-    return false;
 }
 
 /**
@@ -383,176 +351,6 @@ function is_previous_tablerow_delimiter_row (array $elements, int $index): int {
     }
 
     return $offset;
-}
-
-function setListLevel(array &$elements, int $index)
-{
-    $origin = $index;
-    $levels = [];
-    echo 'INDEX ' . $index . PHP_EOL;
-    while (
-            (
-                $elements[$index]->tag !== TagType::UL  
-                || $elements[$index]->tag !== TagType::OL
-            )
-            && !$elements[$index]->close
-    )
-    {
-        if ($elements[$index]->tag !== TagType::LI) {
-            $index++;
-            continue;
-        }
-        echo 'INDEX ' . $index . PHP_EOL;
-        if (!isset($levels[$elements[$index]->level])) {
-            $levels[$elements[$index]->level] = 0;
-        }
-        $index++;
-    }
-
-    ksort($levels);
-var_dump($levels);
-    $level = 10;
-    foreach ($levels as &$v) {
-        echo 'LEVEL ' . $level . PHP_EOL;
-        $v = $level++;
-    }
-
-    $index = $origin;
-    while (
-            ($elements[$index]->tag !== TagType::UL && $elements[$index]->close)
-            || ($elements[$index]->tag !== TagType::OL && $elements[$index]->close)
-    )
-    {
-        if ($elements[$index]->tag !== TagType::LI) {
-            $index++;
-            continue;
-        }
-
-        $elements[$index]->level = $levels[$elements[$index]->level];
-        $index++;
-    }
-
-}
-
-/**
- * Reduce by removing tags like LINEBREAK between two HEADERS and creating
- * PARAGRAPH tags where needed.
- * @param array $tags 
- * @return array 
- */
-function reduce (array $elements): array
-{
-    $output = [];
-    $paragraph = false;
-    $tagCount = count($elements);
-    if ($tagCount === 0) {
-        return [];
-    }
-
-    $inBlock = false;
-    $previous = null;
-    for ($i = 0; $i < $tagCount; $i++) {
-        $element = $elements[$i];
-        /* remove double linebreak */
-        if (($elements[$i]->tag === TagType::UL || $elements[$i]->tag === TagType::OL) && !$elements[$i]->close) {
-            setListLevel($elements, $i);
-        }
-        if ($previous !== NULL) 
-        {
-            switch($element->tag) {
-                case TagType::LINEBREAK:
-
-                    switch(peek_next_element($elements, $i)->tag) {
-                        case TagType::LINEBREAK:
-                            $previous = $element;
-                            continue 3;
-                        case TagType::HEADER:
-                            $previous = $element;
-                            continue 3;
-                        case TagType::PRE:
-                            $previous = $element;
-                            continue 3;
-                        case TagType::QUOTE:
-                            $previous = $element;
-                            continue 3;
-                        case TagType::UL:
-                            $previous = $element;
-                            continue 3;
-                        case TagType::OL:
-                            $previous = $element;
-                            continue 3;
-                    }
-   
-                    break;
-            }
-        }
-        
-        switch($element->tag) {
-            case TagType::HEADER:
-            case TagType::PRE:
-            case TagType::QUOTE:
-            case TagType::UL:
-            case TagType::OL:
-                $inBlock = $element->close;
-                break;
-        }
-
-        if (
-            (
-                $element->tag === TagType::LINEBREAK
-                || $element->tag === TagType::EMPTYLINE
-            )
-            && is_surrounded_by_block_element($elements, $i)
-        ) 
-        {
-            echo 'SURROUNDED BY BLOCK ELEMENT' . PHP_EOL;
-            $previous = $element;
-            continue;
-        }
-
-        if (
-            $element->tag === TagType::LINEBREAK 
-            && peek_next_element($elements, $i)->tag === TagType::HEADER
-        ) {
-            $previous = $element;
-            continue;
-        }
-        if (
-            $element->tag === TagType::LINEBREAK
-            && $paragraph === false
-        ) {
-            switch( peek_next_element($elements, $i)->tag) {
-                case TagType::TEXT:
-                case TagType::STRONG:
-                case TagType::EMPHASIS:
-                    $paragraph = true;
-                    $element->tag = TagType::PARAGRAPH;
-                    break;
-            }
-        }
-        if ($paragraph) {
-            switch($element->tag) {
-                case TagType::HEADER:
-                case TagType::PRE:
-                case TagType::QUOTE:
-                case TagType::UL:
-                case TagType::OL:
-                case TagType::EMPTYLINE:
-                    $endParagraph = new MDElement(TagType::PARAGRAPH);
-                    $endParagraph->close = true;
-                    $output[] = $endParagraph;
-                    $paragraph = false;
-                    $previous = $element;
-                    continue 2;
-            }
-        }
-
-        $previous = $element;
-        $output[] = $element;
-        
-    }
-
-    return $output;
 }
 
 function isEmptyValue($value)
@@ -640,32 +438,8 @@ function parse(array $tokens): array
                 $result[] = new MDElement(TagType::UL, $wsBefore, false);
                 set_tag_open($opened, TagType::UL, $wsBefore);
             }
-            /* close previous list item */
-            /*if (is_tag_open($opened, TagType::UL)) {
-                $alreadyOpen = false;
-                $openedTags = get_open_tags_by_type($opened, TagType::UL);
-                foreach($openedTags as $tag) {
-                    if ($tag['data'] === $wsBefore) {
-                        $alreadyOpen = true;
-                        break;
-                    }
-                }
-                if (!$alreadyOpen) {
-                    $result[] = new MDElement(TagType::UL, $wsBefore);
-                    set_tag_open($opened, TagType::UL, $wsBefore);
-                }
-            }*/
-            /*$previousElement = peek_previous_element($result, count($result));
-            if (
-                    ($previousElement->tag === TagType::TEXT && isEmptyValue($previousElement->value))
-                    || $previousElement->tag === TagType::LINEBREAK
-            ) {
-                $result[count($result) - 1] = new MDElement(TagType::LI, count_beginning_of_line_ws($tokens, $i));
-                set_tag_open($opened, TagType::LI);
-            } else {*/
-                $result[] = new MDElement(TagType::LI, count_beginning_of_line_ws($tokens, $i));
-                set_tag_open($opened, TagType::LI);
-            //}
+            $result[] = new MDElement(TagType::LI, count_beginning_of_line_ws($tokens, $i));
+            set_tag_open($opened, TagType::LI);
             continue;
         }
 
@@ -680,19 +454,10 @@ function parse(array $tokens): array
                     $result[] = new MDElement(TagType::OL);
                     set_tag_open($opened, TagType::OL);
                 }
-
-                /*$previousElement = peek_previous_element($result, count($result));
-                if (
-                        ($previousElement->tag === TagType::TEXT && isEmptyValue($previousElement->value))
-                        || $previousElement->tag === TagType::LINEBREAK
-                ) {
-                    $result[count($result) - 1] = new MDElement(TagType::LI, $token['count']);
-                    set_tag_open($opened, TagType::LI);
-                } else {*/
-                    $result[] = new MDElement(TagType::LI, count_beginning_of_line_ws($tokens, $i));
-                    set_tag_open($opened, TagType::LI);
-                //}
-
+       
+                $result[] = new MDElement(TagType::LI, count_beginning_of_line_ws($tokens, $i));
+                set_tag_open($opened, TagType::LI);
+        
                 $i++; // skip the dot token
                 continue;
             }
@@ -783,11 +548,6 @@ function parse(array $tokens): array
                     }
                 }            
             }
-
-            if ($token['type'] === Token::DASH) {
-
-            }
-
         }
 
         /* quote block, starts with > */
@@ -811,7 +571,8 @@ function parse(array $tokens): array
                 $token['type'] === Token::WS 
                 && $token['count'] >= 4
                 && !is_forward_tokens_list($tokens, $i)
-                && (!is_tag_open($opened, TagType::UL) || !is_tag_open($opened, TagType::UL))
+                && !is_tag_open($opened, TagType::UL) 
+                && !is_tag_open($opened, TagType::OL)
         ) {
             if (is_beginning_of_line($tokens, $i)) {
                 /* if we are already in a pre block, just add a line break */
@@ -862,11 +623,6 @@ function parse(array $tokens): array
             }
 
             if (is_tag_open($opened, TagType::UL)) {
-                /*$closeOrder = get_open_tags_by_type($opened, TagType::UL);
-                uasort($openedTags, fn($a, $b) => $b['count'] - $a['count']);
-                foreach ($closeOrder as $tag) {
-                    $result[] = new MDElement(TagType::UL, $tag['data'], true);
-                }*/
                 $result[] = new MDElement(TagType::UL, 0, true);
                 unset_all_tags_open($opened, TagType::UL);
                 continue;
